@@ -1,0 +1,288 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: AushadhiChakra healthcare supply resilience API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: supply
+    description: Inventory, FEFO and facility operations
+  - name: public
+    description: Public medicine availability
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /facilities:
+    get:
+      operationId: listFacilities
+      tags: [supply]
+      summary: List monitored health facilities
+      responses:
+        "200":
+          description: Facilities
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Facility"
+  /inventory:
+    get:
+      operationId: listInventory
+      tags: [supply]
+      summary: List current medicine inventory
+      responses:
+        "200":
+          description: Inventory rows
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/InventoryItem"
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [supply]
+      summary: Get command center metrics
+      responses:
+        "200":
+          description: Dashboard summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+  /simulation/cascade:
+    get:
+      operationId: getCascadeSimulation
+      tags: [supply]
+      summary: Calculate contagion cascade
+      parameters:
+        - name: elasticity
+          in: query
+          required: false
+          schema: { type: number, minimum: 0.5, maximum: 1.0, default: 0.85 }
+        - name: displacement
+          in: query
+          required: false
+          schema: { type: number, minimum: 0.5, maximum: 1.0, default: 0.7 }
+        - name: spike
+          in: query
+          required: false
+          schema: { type: number, minimum: 1.0, maximum: 3.0, default: 1.0 }
+      responses:
+        "200":
+          description: Simulation output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeSimulation"
+  /rebalance/optimize:
+    post:
+      operationId: runRebalanceOptimizer
+      tags: [supply]
+      summary: Run FEFO rebalance optimizer
+      responses:
+        "200":
+          description: Optimized orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RebalanceOrder"
+  /dispatch/orders:
+    get:
+      operationId: listDispatchOrders
+      tags: [supply]
+      summary: List generated dispatch orders
+      responses:
+        "200":
+          description: Dispatch orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RebalanceOrder"
+  /sms-webhook:
+    post:
+      operationId: postSmsWebhook
+      tags: [supply]
+      summary: Ingest an offline clinic stock SMS
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SmsWebhookInput"
+      responses:
+        "200":
+          description: Parsed SMS result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SmsWebhookResult"
+        "400":
+          description: Invalid SMS command
+  /public/availability:
+    get:
+      operationId: getPublicAvailability
+      tags: [public]
+      summary: Get public medicine availability
+      responses:
+        "200":
+          description: Public availability
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicAvailability"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    Facility:
+      type: object
+      required: [id, name, type, lat, lon, leadTimeDays]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        type: { type: string }
+        lat: { type: number }
+        lon: { type: number }
+        leadTimeDays: { type: number }
+    InventoryItem:
+      type: object
+      required: [facilityId, facilityName, facilityType, drugCode, drugName, unit, currentUnits, dailyBurn, expiryDays, runOutDays, status, batchId]
+      properties:
+        facilityId: { type: string }
+        facilityName: { type: string }
+        facilityType: { type: string }
+        drugCode: { type: string }
+        drugName: { type: string }
+        unit: { type: string }
+        currentUnits: { type: number }
+        dailyBurn: { type: number }
+        expiryDays: { type: number }
+        runOutDays: { type: number }
+        status: { type: string }
+        batchId: { type: string }
+    DashboardSummary:
+      type: object
+      required: [monitoredFacilities, criticalDeficits, nearExpiryUnits, transitLeadTime, generatedAt]
+      properties:
+        monitoredFacilities: { type: number }
+        criticalDeficits: { type: number }
+        nearExpiryUnits: { type: number }
+        transitLeadTime: { type: string }
+        generatedAt: { type: string }
+    CascadeRow:
+      type: object
+      required: [facilityId, facilityName, drugName, originalBurnRate, cascadedBurnRate, updatedRunOutDays, shadowStockoutIndex, status]
+      properties:
+        facilityId: { type: string }
+        facilityName: { type: string }
+        drugName: { type: string }
+        originalBurnRate: { type: number }
+        cascadedBurnRate: { type: number }
+        updatedRunOutDays: { type: number }
+        shadowStockoutIndex: { type: number }
+        status: { type: string }
+    CascadeSimulation:
+      type: object
+      required: [elasticity, displacement, spike, rows, systemRisk]
+      properties:
+        elasticity: { type: number }
+        displacement: { type: number }
+        spike: { type: number }
+        systemRisk: { type: number }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/CascadeRow" }
+    RebalanceOrder:
+      type: object
+      required: [id, donorId, donorName, recipientId, recipientName, drugCode, drugName, units, distanceKm, expiryDays, eta, carrier, status, authorizationCode]
+      properties:
+        id: { type: string }
+        donorId: { type: string }
+        donorName: { type: string }
+        recipientId: { type: string }
+        recipientName: { type: string }
+        drugCode: { type: string }
+        drugName: { type: string }
+        units: { type: number }
+        distanceKm: { type: number }
+        expiryDays: { type: number }
+        eta: { type: string }
+        carrier: { type: string }
+        status: { type: string }
+        authorizationCode: { type: string }
+        batchId: { type: ["string", "null"] }
+    SmsWebhookInput:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string, minLength: 1 }
+    SmsWebhookResult:
+      type: object
+      required: [ok, message, facilityId, drugCode, units, timestamp]
+      properties:
+        ok: { type: boolean }
+        message: { type: string }
+        facilityId: { type: string }
+        drugCode: { type: string }
+        units: { type: number }
+        timestamp: { type: string }
+    TalukAvailability:
+      type: object
+      required: [name, availabilityPercent, verifiedClinics, status]
+      properties:
+        name: { type: string }
+        availabilityPercent: { type: number }
+        verifiedClinics: { type: number }
+        status: { type: string }
+    PublicAvailability:
+      type: object
+      required: [updatedAt, essentialMedicineAvailability, taluks, nearestClinic, advisory]
+      properties:
+        updatedAt: { type: string }
+        essentialMedicineAvailability: { type: number }
+        taluks:
+          type: array
+          items: { $ref: "#/components/schemas/TalukAvailability" }
+        nearestClinic:
+          $ref: "#/components/schemas/NearestClinic"
+        advisory: { type: string }
+    NearestClinic:
+      type: object
+      required: [name, taluk, distanceKm, medicines, verifiedAt]
+      properties:
+        name: { type: string }
+        taluk: { type: string }
+        distanceKm: { type: number }
+        medicines:
+          type: array
+          items: { type: string }
+        verifiedAt: { type: string }
+
